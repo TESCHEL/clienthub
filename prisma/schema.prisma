@@ -1,0 +1,223 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String        @id @default(cuid())
+  clerkId         String        @unique
+  email           String        @unique
+  firstName       String?
+  lastName        String?
+  imageUrl        String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  organizations   OrganizationMember[]
+  updates         Update[]
+  files           File[]
+  approvals       Approval[]
+}
+
+model Organization {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  logoUrl         String?
+  primaryColor    String?       @default("#6366f1")
+  accentColor     String?       @default("#8b5cf6")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  members         OrganizationMember[]
+  clients         Client[]
+  projects        Project[]
+  subscription    Subscription?
+}
+
+model OrganizationMember {
+  id              String        @id @default(cuid())
+  role            MemberRole    @default(MEMBER)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, organizationId])
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Client {
+  id              String        @id @default(cuid())
+  name            String
+  email           String
+  company         String?
+  phone           String?
+  avatarUrl       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  projects        Project[]
+  
+  @@index([organizationId])
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  name            String
+  description     String?
+  status          ProjectStatus @default(ACTIVE)
+  portalToken     String        @unique @default(cuid())
+  portalEnabled   Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  clientId        String
+  client          Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  updates         Update[]
+  files           File[]
+  approvals       Approval[]
+  checklistItems  ChecklistItem[]
+  
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([portalToken])
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+model Update {
+  id              String        @id @default(cuid())
+  title           String
+  content         String
+  isPublic        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  projectId       String
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  authorId        String
+  author          User          @relation(fields: [authorId], references: [id])
+  
+  files           File[]
+  
+  @@index([projectId])
+  @@index([authorId])
+}
+
+model File {
+  id              String        @id @default(cuid())
+  name            String
+  url             String
+  key             String
+  size            Int
+  mimeType        String
+  createdAt       DateTime      @default(now())
+  
+  projectId       String
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  uploaderId      String
+  uploader        User          @relation(fields: [uploaderId], references: [id])
+  
+  updateId        String?
+  update          Update?       @relation(fields: [updateId], references: [id], onDelete: SetNull)
+  
+  @@index([projectId])
+  @@index([uploaderId])
+}
+
+model Approval {
+  id              String          @id @default(cuid())
+  title           String
+  description     String?
+  status          ApprovalStatus  @default(PENDING)
+  respondedAt     DateTime?
+  feedback        String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  projectId       String
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  requestedById   String
+  requestedBy     User            @relation(fields: [requestedById], references: [id])
+  
+  @@index([projectId])
+  @@index([requestedById])
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+}
+
+model ChecklistItem {
+  id              String        @id @default(cuid())
+  title           String
+  isCompleted     Boolean       @default(false)
+  order           Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  projectId       String
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+}
+
+model Subscription {
+  id                    String            @id @default(cuid())
+  stripeCustomerId      String            @unique
+  stripeSubscriptionId  String?           @unique
+  stripePriceId         String?
+  stripeCurrentPeriodEnd DateTime?
+  plan                  SubscriptionPlan  @default(FREE)
+  status                SubscriptionStatus @default(ACTIVE)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  
+  organizationId        String            @unique
+  organization          Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  TEAM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
